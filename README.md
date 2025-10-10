@@ -251,14 +251,14 @@ IMPORTANT: make sure to only use the insecureAdminLogin (dummy account) in devel
 #### Dummy admin account
 On live systems NEVER use the insecureAdminLogin!
 
-User: insecureAdminLogin
+User: insecureAdminLogin<br>
 Password: insecurePasswordRemoveAfterAdminCreated123onZhs2LipBPZVg2itHJsoS7U5tkywsxP
 
 #### Create your own Admin Account
 
-1. Login a first time with the insecureAdminLogin.
+1. Login with the insecureAdminLogin.
 
-2. Create your own admin account with a secure password, to use it later.
+2. Create your own admin account with a secure password.
 
 3. Logout from the insecureAdminLogin and login with your own admin account.
 
@@ -294,17 +294,19 @@ Password: insecurePasswordRemoveAfterAdminCreated123onZhs2LipBPZVg2itHJsoS7U5tky
 
 Use the `startup.sh`-script or follow the next steps to manually start it:
 
-1. Start nginx:
+1. Copy the http.conf to `/etc/nginx/conf.d/http.conf`
+
+2. Start nginx:
 
    $ `sudo service nginx start/stop/status` or do $ `sudo nginx -s reload` for reloading
 
-2. Start the Certbot Timer: $ `sudo systemctl start certbot.timer`
+3. Start the Certbot Timer: $ `sudo systemctl start certbot.timer`
 
-3. Start mongoDB:
+4. Start mongoDB:
 
    $ `sudo service mongod start/stop/status`
 
-4. The application has to be run in the virtual environment where the requirements are installed.
+5. The application has to be run in the virtual environment where the requirements are installed.
 
    $ `cd server`
 
