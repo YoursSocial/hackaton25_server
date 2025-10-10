@@ -11,7 +11,7 @@
 - sudo apt install python3.11-venv
 - sudo apt install certbot python3-certbot-nginx
 
-#### Install the Application:
+#### Install the Virtual environment:
 
 1. Clone the repository
 
@@ -37,6 +37,8 @@ Note: if a system upgrade messes with the virtual environment and upgrades pytho
 
 #### Install MongoDB on Ubuntu 20.04:
 
+0. Info: currently used for the main application, mights be moved in the next updates to postgres
+
 1. Import the public key used by the package management system:
 
    $ `wget -qO - https://www.mongodb.org/static/pgp/server-5.0.asc | sudo apt-key add -`
@@ -52,6 +54,93 @@ Note: if a system upgrade messes with the virtual environment and upgrades pytho
 4. Install MongoDB packages:
 
    $ `sudo apt-get install -y mongodb-org`
+
+#### Setup PostgreSQL:
+
+0. Info: currently only used for the dashboard data, in future maybe for the whole application
+
+1. Install PostgreSQL
+
+    $ `apt install postgresql`
+2. Login as superuser or create own user account with sufficient privileges, then create new database with name postgres
+
+    $ `sudo -u postgres createdb postgres`
+3. Enter database
+
+    $ `sudo -u postgres psql postgres`
+4. Change the password of the superuser to something secure ( ! important step, default password "postgres" not secure ! )
+
+    $ `\password postgres`
+
+5. Create tables
+
+```
+    CREATE SCHEMA public AUTHORIZATION pg_database_owner;
+
+    CREATE SEQUENCE sensor_job_id_seq
+        INCREMENT BY 1
+        MINVALUE 1
+        MAXVALUE 2147483647
+        START 1
+        CACHE 1
+        NO CYCLE;
+
+    CREATE TABLE jobs (
+        "name" text NOT NULL,
+        command text NULL,
+        start_time int4 NULL,
+        end_time int4 NULL,
+        CONSTRAINT jobs_pkey PRIMARY KEY (name)
+    );
+
+    CREATE TABLE sensor_job (
+        id serial4 NOT NULL,
+        job_name text NULL,
+        sensor_name text NULL,
+        lat float8 NULL,
+        lon float8 NULL,
+        sample_rate int4 NULL,
+        center_freq int4 NULL,
+        bandwidth int4 NULL,
+        gain int4 NULL,
+        if_gain int4 NULL,
+        bb_gain int4 NULL,
+        decimation int4 NULL,
+        CONSTRAINT sensor_job_job_name_sensor_name_key UNIQUE (job_name, sensor_name),
+        CONSTRAINT sensor_job_pkey PRIMARY KEY (id),
+        CONSTRAINT sensor_job_job_name_fkey FOREIGN KEY (job_name) REFERENCES jobs("name")
+    );
+
+    CREATE TABLE signal (
+        id int4 NOT NULL,
+        "timestamp" float8 NOT NULL,
+        signal_level float4 NULL,
+        background_noise float4 NULL,
+        snr float4 NULL,
+        count int4 NULL,
+        CONSTRAINT signal_pkey PRIMARY KEY (id, "timestamp"),
+        CONSTRAINT signal_id_fkey FOREIGN KEY (id) REFERENCES sensor_job(id)
+    );
+
+    CREATE TABLE stderr (
+        id int4 NOT NULL,
+        "timestamp" float8 NOT NULL,
+        i int4 NULL,
+        o int4 NULL,
+        ok_s int4 NULL,
+        ok int4 NULL,
+        CONSTRAINT stderr_pkey PRIMARY KEY (id, "timestamp"),
+        CONSTRAINT stderr_id_fkey FOREIGN KEY (id) REFERENCES sensor_job(id)
+    );
+
+    CREATE TABLE packets (
+        id int4 NOT NULL,
+        "type" text NOT NULL,
+        count int4 NULL,
+        CONSTRAINT packets_pkey PRIMARY KEY (id, type),
+        CONSTRAINT packets_id_fkey FOREIGN KEY (id) REFERENCES sensor_job(id)
+    );
+```
 
 #### Install and Setup Nginx:
 
@@ -81,60 +170,19 @@ Note: if a system upgrade messes with the virtual environment and upgrades pytho
 
 5. Start the Certbot Timer: $ `sudo systemctl start certbot.timer`
 
-   
+#### Setup iridium-toolkit:
+1. In the root directory of the server, create tools folder
 
-## Run the Application
+    $ `mkdir tools`
+2. Enter folder
 
-Use the `startup.sh`-script or do it manually:
+    $ `cd tools`
 
-1. Start nginx:
+2. Clone the repository
 
-   $ `sudo service nginx start/stop/status` or do $ `sudo nginx -s reload` for reloading
+    $ `git clone https://github.com/muccc/iridium-toolkit.git`
 
-2. Start the Certbot Timer: $ `sudo systemctl start certbot.timer`
-
-3. Start mongoDB:
-
-   $ `sudo service mongod start/stop/status`
-
-4. The application has to be run in the virtual environment where the requirements are installed.
-
-   $ `cd server`
-
-​   $ `source env/bin/activate`
-
-​   Note: The virtual environment can be deactivated by entering `deactivate`
-
-Furthermore, set PYTHONPATH as the current directory:
-
-​   (env)$ `export PYTHONPATH=$PWD`
-
-Finally, run the application:
-
-​   (env)$ `python3 app/main.py`
-
-
-## Run the Application using screen
-1. Open a screen session: $ `screen`
-
-2. Run the application with the startup script: $ `./startup.sh`
-
-3. Detatch the current session: $ `ctrl+a`, `d`
-
-4. Close the terminal.
-
-Access the detatched screen session and terminate the server:
-
-1. List all detatched sessions: $ `screen -ls`
-
-2. Connect to a specific session: $ `screen -r <sessionName>`
-
-3. Terminate the server: $ `ctrl-x`
-
-4. End the screen session: $ `exit`
-
-
-## Development environment
+## Setup the accounts
 
 Do not run the development environment on the live-server!
 
@@ -142,7 +190,7 @@ The development environment offers:
 
 - FastAPI development-page (127.0.0.1:8000/docs)
 
-#### To activate the dev-environment:
+#### Activate the development-environment:
    
 1. Delete the http.conf: $ `rm http.conf`
 
@@ -150,15 +198,13 @@ The development environment offers:
 
 3. http.conf: change `root /home/user/server/app/static;` to your own path to the /app/static-folder
 
-4. Copy the http.conf to `/etc/nginx/conf.d/http.conf`
+4. Modify `startup.sh`: comment out the block about the certbot-timer
 
-5. Modify `startup.sh`: comment out the block about the certbot-timer
+5. Run `startup.sh`
 
-6. Run `startup.sh`
+6. Open website via `http://127.0.0.1` or FastAPI via `127.0.0.1:8000/docs`
 
-7. Open website via `http://127.0.0.1` or FastAPI via `127.0.0.1:8000/docs`
-
-8. Modify the mongoDB as shown below to create a inital dummy-account.
+7. Modify the mongoDB as shown below to create a inital dummy-account.
 
 Differences between dev-env and live-env:
 
@@ -207,6 +253,95 @@ On live systems NEVER use the insecureAdminLogin!
 
 User: insecureAdminLogin
 Password: insecurePasswordRemoveAfterAdminCreated123onZhs2LipBPZVg2itHJsoS7U5tkywsxP
+
+#### Create your own Admin Account
+
+1. Login a first time with the insecureAdminLogin.
+
+2. Create your own admin account with a secure password, to use it later.
+
+3. Logout from the insecureAdminLogin and login with your own admin account.
+
+4. Delete the insecureAdminLogin.
+
+#### Setup Dashboard:
+
+1. Create a dedicated dashboard account with user privileges on the server
+
+2. Locate the `.env` file in the `/env` directory, add the following lines and fill the empty quotation marks with own values
+
+    `DASH_DB_USER=""` the name of the postgres user ("postgres" or own user account)
+
+    `DASH_DB_PASSWORD=""` the password of the postgres user
+
+    `DASH_USER=""` the name of the dashboard user from step 1
+
+    `DASH_PASSWORD=""` the password of the dashboard user from step 1
+
+#### Deactivate the development-environment:
+   
+1. Copy http_live.conf to http.conf: $ `cp http_live.conf http.conf` 
+
+2. http.conf: change `root /home/user/server/app/static;` to your own path to the /app/static-folder
+
+3. Modify `startup.sh`: comment in the block about the certbot-timer
+
+4. Run `startup.sh`
+
+5. Open website via the external address.
+
+## Run the Application
+
+Use the `startup.sh`-script or follow the next steps to manually start it:
+
+1. Start nginx:
+
+   $ `sudo service nginx start/stop/status` or do $ `sudo nginx -s reload` for reloading
+
+2. Start the Certbot Timer: $ `sudo systemctl start certbot.timer`
+
+3. Start mongoDB:
+
+   $ `sudo service mongod start/stop/status`
+
+4. The application has to be run in the virtual environment where the requirements are installed.
+
+   $ `cd server`
+
+​   $ `source env/bin/activate`
+
+​   Note: The virtual environment can be deactivated by entering `deactivate`
+
+Furthermore, set PYTHONPATH as the current directory:
+
+​   (env)$ `export PYTHONPATH=$PWD`
+
+Finally, run the application:
+
+​   (env)$ `python3 app/main.py`
+
+
+## Run the Application using screen
+1. Open a screen session: $ `screen`
+
+2. Run the application with the startup script: $ `./startup.sh`
+
+3. Detatch the current session: $ `ctrl+a`, `d`
+
+4. Close the terminal.
+
+Access the detatched screen session and terminate the server:
+
+1. List all detatched sessions: $ `screen -ls`
+
+2. Connect to a specific session: $ `screen -r <sessionName>`
+
+3. Terminate the server: $ `ctrl-x`
+
+4. End the screen session: $ `exit`
+
+
+
 
 
 ## TODOs

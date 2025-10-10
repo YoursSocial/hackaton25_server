@@ -52,22 +52,27 @@
       <li><button class="button ui-button ui-corner-all ui-widget ui-state-disabled normal_buttons", id="rm_owner">Remove Owner</button></li>
     </ul>
   </div>
-  <div id=content >
-    <h3 style="display: inline-block">Sensorname: </h3>
-    <h3 style="display: inline-block", id=sensor_name_field></h3>
+  <div id=content style="display: flex; flex-wrap: wrap;">
+    <div id=text style="flex: 1; flex-grow: 2;">
+        <h3 style="display: inline-block">Sensorname: </h3>
+        <h3 style="display: inline-block", id=sensor_name_field></h3>
 
-    <ul>
-      <li id=sensor_status_id>ID: </li>
-      <li id=sensor_scheduled_jobs>scheduled jobs:</li>
-      <li id=sensor_last_contact>Last contact: </li>
-      <li>Sensor Properties: </li>
-        <ul id=sensor_properties_list>
+        <ul>
+          <li id=sensor_status_id>ID: </li>
+          <li id=sensor_scheduled_jobs>scheduled jobs:</li>
+          <li id=sensor_last_contact>Last contact: </li>
+          <li>Sensor Properties: </li>
+            <ul id=sensor_properties_list>
+            </ul>
+          </li>
         </ul>
-      </li>
-    </ul>
 
-      </tbody>
-    </table>
+          </tbody>
+        </table>
+	</div>
+
+    <div id=heatmap style="flex: 1; border:none; flex-grow: 1; margin-left: 1em; margin-top: 1.5vh; margin-right: 3px;"></div>
+	<div id=dashboard style="display: block; border:none; width:100%; height:60%; flex-shrink: 0;"></div>
 
   </div>
   <div id=page_bottom class=page >

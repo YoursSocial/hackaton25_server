@@ -43,6 +43,13 @@ def remove_file(path: str) -> None:
         os.remove(path)
 
 
+@router.get('/auth', response_description="Successfully authenticated")
+async def auth(Authorize: AuthJWT = Depends()):
+    if not await validate_access_token_rights(Authorize=Authorize, required_permissions=["admin", "user", "sensor"]):
+        return ErrorResponseModel(401, "Unauthorized.")
+    return ResponseModel("", "Authentication Successful")
+
+
 @router.post('/userlogin', response_description="Successfully logged in")
 async def userlogin(credentials: UserLogin, Authorize: AuthJWT = Depends()):
     # credentials in body (is not logged by nginX)

@@ -28,11 +28,17 @@
             <h1 class="highlight">The DiscoSAT Network</h1>
             The DiscoSAT network is a collection of sensors placed across Europe, designed to monitor satellite communications. The map below shows the approximate locations of these sensors.
         </div>
-    
-        <div id="map"></div>  
+
+        <div id=center-text style="display: flex; align-items: stretch; padding-bottom: 10px;">
+            <div id="dashboard" style="display: flex; width: 30%;"></div>
+            <div id="maps" style="display: flex; width: 70%; height: 900px; flex-direction: column;">
+                <div id="map" style="flex-shrink: 0; width: 100%; height: 600px;"></div>
+                <div id="heatmap" style="flex-shrink: 0; width: 100%; height: 285px; text-align: center; margin-top: 1px;"></div>
+            </div>
+        </div>
 
         <div class="text" id="lower-text">
-            The network is operated by the reasearch team of the  <a href="https://disco.cs.uni-kl.de">Distributed Computer Systems (DISCO) group</a> at the university of Kaiserslautern (RPTU Kaiserslautern-Landau). Our research comprises performance and security aspects of distributed systems. One of our primary focuses is the physical layer security of wireless systems.
+            The network is operated by the research team of the  <a href="https://disco.cs.uni-kl.de">Distributed Computer Systems (DISCO) group</a> at the university of Kaiserslautern (RPTU Kaiserslautern-Landau). Our research comprises performance and security aspects of distributed systems. One of our primary focuses is the physical layer security of wireless systems.
             <br><br>
             In one of our recent works we used the DiscoSAT system to investigate the RECORD (RECeption-Only Region Determination) Attack on LEO satellite systems. This attack makes it possible to locate users by analyzing satellite communications. <br>
             The paper initially presenting this attack can be found <a href="https://www.usenix.org/conference/usenixsecurity24/presentation/jedermann">here</a>.

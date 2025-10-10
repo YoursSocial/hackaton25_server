@@ -35,6 +35,7 @@ function startCall() {
       job_data = response.data;
       console.log(job_data);
       buildContent(job_data)
+	  startDashboard(job_data);
     },
     error: function(response){
       var status = response.status;
@@ -52,6 +53,12 @@ function startCall() {
   });
 }
 
+function startDashboard(job_data){
+	var name = job_data.name;
+	var url = '/dash/job_details/' + name;
+	var iframe = "<iframe src=" + url + " style='border:none; width:100%; height:100%'></iframe>";
+	document.getElementById('dashboard').innerHTML = iframe;
+}
 
 function buildContent(job_data) {
   var id = job_data.id;

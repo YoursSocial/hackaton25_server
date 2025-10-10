@@ -35,6 +35,7 @@ function startCall() {
       sensor = response.data;
       console.log(sensor);
       buildContent(sensor)
+	  startDashboard(sensor);
     },
     error: function(response){
       var status = response.status;
@@ -50,6 +51,18 @@ function startCall() {
       }
     },
   });
+}
+
+function startDashboard(sensor){
+	var name = sensor.sensor_name;
+
+	var url = '/dash/sensor_details/' + name;
+	var iframe = "<iframe src=" + url + " style='border:none; width:100%; height:100%'></iframe>";
+	document.getElementById('dashboard').innerHTML = iframe;
+
+	var url_map = '/dash/heatmap/' + name;
+	var iframe_map = "<iframe src=" + url_map + " style='border:none; width:100%; height:100%'></iframe>";
+	document.getElementById('heatmap').innerHTML = iframe_map;
 }
 
 function buildContent(sensor) {

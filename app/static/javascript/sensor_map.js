@@ -14,6 +14,7 @@ function startCall() {
             offline_sensors = response.data[1];
             console.log(online_sensors);
             console.log(offline_sensors);
+            startDashboard();
             if (online_sensors.length || offline_sensors.length){//need at least 1 sensor to calculate the map bounds below
                 generatingMap();
             }else{
@@ -26,6 +27,16 @@ function startCall() {
             console.log("sensors-autoload error: ", response.status, response.responseText);
         },
     });
+}
+
+function startDashboard(){
+	var url = '/dash/public_page/';
+	var iframe = "<iframe src=" + url + " style='border:none; width:100%; height:100%;'></iframe>";
+	document.getElementById('dashboard').innerHTML = iframe;
+
+	var url_map = '/dash/heatmap/all'
+	var iframe_map = "<iframe src=" + url_map + " style='border:none; width:67%; height:100%;'></iframe>";
+	document.getElementById('heatmap').innerHTML = iframe_map;
 }
 
 function generatingMap(){

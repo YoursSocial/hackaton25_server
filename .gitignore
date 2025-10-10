@@ -3,5 +3,6 @@ __pychache__
 env/
 *.Rhistory
 app/server/file_uploads/*
+!app/server/file_uploads/.gitkeep
 *.idea/
 

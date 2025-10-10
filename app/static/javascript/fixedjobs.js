@@ -16,7 +16,7 @@ function startCall() {
       fixedJobs = response.data;
       buildTable(fixedJobs);
       //buildContent(fixedJobs);
-      
+	  startDashboard();
     },
     error: function(response){
       var status = response.status;
@@ -32,6 +32,12 @@ function startCall() {
       }
     },
   });
+}
+
+function startDashboard(){
+	var url = '/dash/job_tracker';
+	var iframe = "<iframe src=" + url + " style='border:none; width:100%; height:100%'></iframe>";
+	document.getElementById('dashboard').innerHTML = iframe;
 }
 
 function shortenString(inputString, maxLengths){
@@ -427,7 +433,3 @@ $( function() {
     dialog.dialog( "open" );
   });
 } );
-
-
-
-
