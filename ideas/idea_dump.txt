@@ -1,0 +1,9 @@
+1. satellite info
+pull e.g. once a week automatically TLE files https://celestrak.org/NORAD/elements/index.php?FORMAT=tle > "active satellites"
+2. preprocess data: filter the valid LEO satellites (python script TLEpreprocess.py)
+3. visualize satellite position on a map (flat or 3d) using the positions calculated with the TLE data e.g. using astropy or skyfield ("live update"). Mark if received within timeframe (blue) or not (red)
+4. incorporate signatures to verify satellite signals (mark green): 
+- create discosat account 
+- create script to automatically run small job e.g. 5mins each hour
+- implement signature
+- mark verified satellites in visualization
