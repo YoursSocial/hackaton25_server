@@ -24,7 +24,7 @@ def filter_data(data, timestamp, output_file):
         "globalstar_satellites": 0,
         "orbcomm_satellites": 0,
     }
-    
+    data_dicts = []
     
     for i in range(0, len(data)-3, 3):
         try: 
@@ -56,34 +56,57 @@ def filter_data(data, timestamp, output_file):
                 output_file.write(line1+"\n")
                 output_file.write(line2+"\n")
 
+                #create json:
+                data_dict = {
+                    "name": line_name,
+                    "line1": line1, 
+                    "line2": line2,
+                }
+
+
                 #stats
                 stats["leo_satellites"] += 1
                 if satellite.name.startswith("IRIDIUM"):
                     stats["iridium_satellites"] += 1
+                    data_dict["type"] = "Communications"
+                    data_dict["system"] = "Iridium"
                 elif satellite.name.startswith("STARLINK"):
                     stats["starlink_satellites"] += 1 
+                    data_dict["type"] = "Communications"
+                    data_dict["system"] = "Starlink"
                 elif satellite.name.startswith("ORBCOMM"):
                     stats["orbcomm_satellites"] += 1 
+                    data_dict["type"] = "Communications"
+                    data_dict["system"] = "Orbcomm"
                 elif satellite.name.startswith("GLOBALSTAR"):
                     stats["globalstar_satellites"] += 1 
+                    data_dict["type"] = "Communications"
+                    data_dict["system"] = "Globalstar"
                 elif satellite.name.startswith("ONEWEB"):
                     stats["oneweb_satellites"] += 1
+                    data_dict["type"] = "Communications"
+                    data_dict["system"] = "Oneweb"
+                else:
+                    data_dict["type"] = "Other"
+                    data_dict["system"] = ""
+                data_dicts.append(data_dict)
 
         except Exception as e:
             print("Unable to decode TLE data. Make the sure TLE data is formatted correctly." + str(e))
             exit(1)
         
-    return stats
+    return stats,data_dicts   
 
 
 if __name__ == '__main__':
     output_path = "output/"
     output_tle = "active_leos.tle"
-    with open(output_path+output_tle, "w") as output_file, open(output_path+"stats.json", "w") as f:
+    with open(output_path+output_tle, "w") as output_file, open(output_path+"stats.json", "w") as f, open(output_path+"tles.json", "w") as f2:
         tle_date = datetime.datetime.now(datetime.UTC) #timestamp for freshness check
         tle_data = pull_data()#open("local_copy.txt").read().splitlines()
         print("**fresh TLE data obtained")
 
-        stats_data = filter_data(tle_data, tle_date, output_file)
+        stats_data, tle_data = filter_data(tle_data, tle_date, output_file)
         json.dump(stats_data, f, indent=2, sort_keys=False)
+        json.dump(tle_data, f2, indent=2, sort_keys=False)
         print(f"**outputs stored in: {output_path}")
