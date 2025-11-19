@@ -221,7 +221,87 @@ def iridium_ira():
     return JSONResponse(content=safe_json)
 
 
+@app.get("/network_stats_packets_over_time")
+def network_stats_packets_over_time():
+    """
+    Return network stats DataFrame grouped by time (monthly) and number of packets as JSON (list of records).
+    If `dataset` is omitted and exactly one dataset exists, it will be selected automatically.
+    Use `limit` to restrict rows.
+    """
+    feather_path = os.path.join(_PARSED_ROOT, "network_stats.feather")
+    df = pd.read_feather(feather_path)
 
+    # Group df by year and month and count datapoints per month
+    # Ensure timestamp column exists
+    if "timestamp" not in df.columns:
+        df["timestamp"] = pd.to_datetime(df["time"], unit="s", utc=True)
+
+    # Create year and month columns (integers)
+    df["year"] = df["timestamp"].dt.year
+    df["month"] = df["timestamp"].dt.month
+
+    # Aggregate: count rows per year/month
+    df_packets_over_time = (
+        df.groupby(["year", "month"])  
+        .size()
+        .reset_index(name="count")
+        .sort_values(["year", "month"])  
+        .reset_index(drop=True)
+    )
+
+    # Also add an ISO-like year-month column for easier plotting/labeling
+    df_packets_over_time["year_month"] = df_packets_over_time["year"].astype(str) + "-" + df_packets_over_time["month"].astype(str).str.zfill(2)
+
+    records = df_packets_over_time.to_dict(orient="records")
+    return jsonable_encoder(records)
+
+
+@app.get("/network_stats_number_of_packets")
+def network_stats_number_of_packets():
+    """
+    Return network stats DataFrame grouped by number of packets as JSON (list of records).
+    If `dataset` is omitted and exactly one dataset exists, it will be selected automatically.
+    Use `limit` to restrict rows.
+    """
+    feather_path = os.path.join(_PARSED_ROOT, "network_stats.feather")
+    df = pd.read_feather(feather_path)
+
+    # Group df by number of packets
+    df_packets = df.groupby("frame_type").size().reset_index(name="count").sort_values(by="count", ascending=False).reset_index(drop=True)
+
+    records = df_packets.to_dict(orient="records")
+    return jsonable_encoder(records)
+
+
+@app.get("/network_stats_number_of_jobs_per_month")
+def network_stats_number_of_jobs_per_month():
+    """
+    Return network stats DataFrame grouped by number of jobs per month as JSON (list of records).
+    If `dataset` is omitted and exactly one dataset exists, it will be selected automatically.
+    Use `limit` to restrict rows.
+    """
+    feather_path = os.path.join(_PARSED_ROOT, "network_stats.feather")
+    df = pd.read_feather(feather_path)
+
+    # Ensure timestamp column exists
+    if "timestamp" not in df.columns:
+        df["timestamp"] = pd.to_datetime(df["time"], unit="s", utc=True)
+
+    # Create year and month columns (integers)
+    df["year"] = df["timestamp"].dt.year
+    df["month"] = df["timestamp"].dt.month
+
+    # Aggregate: count unique jobs per year/month
+    df_jobs_per_month = (
+        df.groupby(["year", "month"])["job_name"]  
+        .nunique()  
+        .reset_index(name="unique_job_count")
+        .sort_values(["year", "month"])  
+        .reset_index(drop=True)
+    )
+    
+    records = df_jobs_per_month.to_dict(orient="records")
+    return jsonable_encoder(records)
 
 
 if __name__ == "__main__":
