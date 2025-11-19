@@ -4,6 +4,7 @@ import subprocess
 import sys
 import os
 from pathlib import Path
+import pyarrow.feather as feather
 
 # Ensure repository root is on sys.path so `app` package is importable
 # when running this script from the `data/` folder directly.
@@ -141,36 +142,91 @@ def tdoa_filter(ira_df):
     print(reduced_df)
 
 
+def create_network_stats(parsed_folder: Path) -> pd.DataFrame:
+
+    # Find all .feather files in all subfolders of parsed_path and concatenate them
+    feather_files = list(parsed_folder.glob("**/*.feather"))
+
+    # Ingore ira.feather (as those are all ring alerts from all jobs combined)
+    ingore_files = [f for f in feather_files if f.name == "ira.feather" or f.name == "network_stats.feather" or f.name == "df_packets.feather"]
+    feather_files = [f for f in feather_files if f not in ingore_files]
+
+    print(f"Found {len(feather_files)} feather files under {parsed_folder}")
+
+    dfs = []
+    for f in sorted(feather_files):
+        # Split on 'parsed\' and take the part after
+        if 'parsed\\' in str(f):
+            after_parsed = str(f).split('parsed\\')[1]
+        else:
+            after_parsed = str(f)
+        
+        # Split on '_sensor_' and take the job name (part before)
+        parts = after_parsed.split('_sensor_')
+        job_name = parts[0] if len(parts) > 0 else ""
+        sensor_name = parts[1].split('\\')[0] if len(parts) > 1 else ""
+
+        try:
+            df = feather.read_feather(f)
+            # keep a provenance column so we know which file a row came from
+            # df["_source_feather"] = str(f)
+            # dfs.append(df)
+            df["job_name"] = job_name
+            df["sensor_name"] = sensor_name
+            dfs.append(df)
+        except Exception as e:
+            print(f"Failed to read {f}: {e}")
+
+    if dfs:
+        combined = pd.concat(dfs, ignore_index=True)
+        # print(f"Combined dataframe shape: {combined.shape}")
+        # display(combined.head())
+    else:
+        combined = pd.DataFrame()
+        print("No feather files found or all reads failed.")
+
+    df_combined = pd.concat([combined], ignore_index=True)
+
+    return df_combined
+
+
 
 input_path = Path("ideas/data")
 parsed_folder = Path("ideas/data/parsed/")
 
-dfs = []
 
-for zip_file in input_path.glob("*.zip"):
+pd.DataFrame(create_network_stats(parsed_folder)).to_feather(parsed_folder / "network_stats.feather")
 
-    job_folder_name = zip_file.name.replace('.zip', '')
+
+# dfs = []
+
+# for zip_file in input_path.glob("*.zip"):
+
+#     job_folder_name = zip_file.name.replace('.zip', '')
     
-    print(zip_file)
+#     print(zip_file)
 
-    raw_parser(zip_file,parsed_folder)
+#     raw_parser(zip_file,parsed_folder)
 
-    metadata_parser(job_folder_name, parsed_folder)
+#     metadata_parser(job_folder_name, parsed_folder)
 
-    df = ira_parser(open(parsed_folder / job_folder_name / "output.parsed","r")) 
+#     df = ira_parser(open(parsed_folder / job_folder_name / "output.parsed","r")) 
 
 
-    # Sensor and Job info
-    df['job_name'] = job_folder_name.split('_sensor_')[0]
-    df['sensor_name'] = job_folder_name.split('_sensor_')[1]
+#     # Sensor and Job info
+#     df['job_name'] = job_folder_name.split('_sensor_')[0]
+#     df['sensor_name'] = job_folder_name.split('_sensor_')[1]
 
-    print(df.head(1))
+#     print(df.head(1))
 
     
 
-    dfs.append(df)
+#     dfs.append(df)
     
-pd.concat(dfs, ignore_index=True).to_feather(parsed_folder / "ira.feather")
+# pd.concat(dfs, ignore_index=True).to_feather(parsed_folder / "ira.feather")
+
+
+
 
 
 
