@@ -25,19 +25,21 @@ app.add_middleware(
 # The API now loads DataFrames from `data/tmp/<dataset>/output_df.feather`.
 # Helpers below enumerate available datasets and load the requested feather file.
 
-_TMP_ROOT = os.path.join(os.path.dirname(__file__), "tmp")
-_DATA_ROOT = os.path.dirname(__file__)
+_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+_DATA_ROOT = os.path.join(_PROJECT_ROOT, "ideas", "data")
+_PARSED_ROOT = os.path.join(_DATA_ROOT, "parsed")
+
 
 
 def list_datasets() -> List[str]:
     """Return folder names in `data/tmp` that contain `output_df.feather`.
     Sorted alphabetically.
     """
-    if not os.path.isdir(_TMP_ROOT):
+    if not os.path.isdir(_PARSED_ROOT):
         return []
     names = []
-    for name in os.listdir(_TMP_ROOT):
-        full = os.path.join(_TMP_ROOT, name)
+    for name in os.listdir(_PARSED_ROOT):
+        full = os.path.join(_PARSED_ROOT, name)
         if os.path.isdir(full) and os.path.exists(os.path.join(full, "output_df.feather")):
             names.append(name)
     return sorted(names)
@@ -63,7 +65,7 @@ def _resolve_dataset(dataset: Optional[str]) -> str:
 
 
 def load_df_for_dataset(dataset: str) -> pd.DataFrame:
-    path = os.path.join(_TMP_ROOT, dataset, "output_df.feather")
+    path = os.path.join(_PARSED_ROOT, dataset, "output_df.feather")
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail=f"Feather file not found for dataset '{dataset}'")
     return pd.read_feather(path)
@@ -187,7 +189,8 @@ def get_tle(
 def iridium_ira():
     """Get Iridium IRA data as JSON"""
 
-    feather_path = os.path.join(_DATA_ROOT, "dummy_ira.feather")
+    # feather_path = os.path.join(_DATA_ROOT, "dummy_ira.feather")
+    feather_path = os.path.join(_PARSED_ROOT, "ira.feather")
     # Ensure the feather file exists
     if not os.path.exists(feather_path):
         raise HTTPException(status_code=404, detail=f"Feather file not found at {feather_path}")
@@ -216,6 +219,9 @@ def iridium_ira():
     if isinstance(safe_json, list) and len(safe_json) == 1:
         return JSONResponse(content=safe_json[0])
     return JSONResponse(content=safe_json)
+
+
+
 
 
 if __name__ == "__main__":
