@@ -1,14 +1,98 @@
 import pandas as pd
+import zipfile
+import subprocess
+import sys
 from pathlib import Path
 
-def raw_parser(raw_input_file):
+# Ensure repository root is on sys.path so `app` package is importable
+# when running this script from the `data/` folder directly.
+repo_root = Path(__file__).resolve().parents[1]
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+
+from app.dashboard.parser import parser_iridium
+
+
+def raw_parser(path_to_zip: str) -> None:
     """
     function to parse raw leocommon file
     input: parsed_input_file; output.bits file from leocommon system
     output: 
     """
-    #TODO insert markus raw parser
-    pass
+
+    py = sys.executable  # python executable to use (default: current interpreter)
+    # root folder to search for .bits files (default: repo `data/`)
+    data_root: Path = Path(__file__).resolve().parents[1] / "data"
+    # path to iridium-parser.py (default: repo `iridium-toolkit-master/iridium-parser.py`)
+    parser_path: Path = Path(__file__).resolve().parents[1] / "iridium-toolkit-master" / "iridium-parser.py"
+
+    job_folder_name = path_to_zip.replace('.zip', '')
+
+    tmp_dir = data_root / "tmp" / job_folder_name
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+
+    with zipfile.ZipFile(data_root / path_to_zip, 'r') as zip_ref:
+        zip_ref.extractall(tmp_dir)
+
+    cwd: Path = tmp_dir
+
+
+    bits_files = list(tmp_dir.glob("*.bits"))
+    agg = False
+
+    print(f"Found {len(bits_files)} .bits files")
+
+    if len(bits_files) > 1:
+        # Aggregate all .bits files into one
+        agg = True
+
+        output_path = tmp_dir / "tmp_output.bits"
+        with open(output_path, "wb") as outfile:
+            for bits_file in sorted(bits_files):
+                with open(bits_file, "rb") as infile:
+                    outfile.write(infile.read())
+        print(f"Aggregated {len(bits_files)} files into {output_path}")
+    else:
+        print("Only 0 or 1 file found, no aggregation needed")
+
+
+
+    cmd = [py, str(parser_path)]
+    if agg:
+        cmd.extend(["-p", (tmp_dir / "tmp_output.bits").name])
+    else:
+        cmd.extend(["-p", (cwd / "output.bits").name])
+
+    print(f"Running: {cmd}  (cwd={cwd})")
+    proc = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True)
+
+    if agg:
+        # Remove temporary aggregated file
+        remove_path = tmp_dir / "tmp_output.bits"
+        remove_path.unlink()
+        rename_path = tmp_dir / "tmp_output.parsed"
+        rename_path.rename(tmp_dir / "output.parsed")
+
+    # At Some point, delete tmp folder?
+
+def metadata_parser(zip_folder_name: str) -> None:
+    frames, time_lower, time_upper = parser_iridium.read_parsed_output(Path(f"data/tmp/{zip_folder_name}/"))
+
+	# print(f"Time lower: {time_lower}")
+	# print(f"Time upper: {time_upper}")
+	# print(f"Time difference (s): {(time_upper - time_lower)}")
+	
+    if len(frames) != 0:
+        type_dict = {'time': float, 'frame_type': str, 'signal_level': float, 'background_noise': float,
+					 'snr': float}
+
+    df = pd.DataFrame(data=frames)
+    df = df.astype(dtype=type_dict)
+    df = df.sort_values(by="time").reset_index()
+
+    df.to_feather(f"data/tmp/{zip_folder_name}/output_df.feather")
+
+
 
 def ira_parser(parsed_input_file):
     """
