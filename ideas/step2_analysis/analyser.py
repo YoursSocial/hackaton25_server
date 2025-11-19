@@ -2,12 +2,19 @@ import pandas as pd
 import zipfile
 import subprocess
 import sys
+import os
 from pathlib import Path
+
+# Ensure repository root is on sys.path so `app` package is importable
+# when running this script from the `data/` folder directly.
+repo_root = Path(__file__).resolve().parents[2]
+if str(repo_root) not in sys.path:
+	sys.path.insert(0, str(repo_root))
 from app.dashboard.parser import parser_iridium
 
 
 
-def raw_parser(path_to_zip: str) -> None:
+def raw_parser(path_to_zip: Path, output_folder: Path) -> None:
     """
     function to parse raw leocommon file
     input: parsed_input_file; output.bits file from leocommon system
@@ -15,20 +22,19 @@ def raw_parser(path_to_zip: str) -> None:
     """
 
     py = sys.executable  # python executable to use (default: current interpreter)
-    # root folder to search for .bits files (default: repo `data/`)
-    data_root: Path = Path(__file__).resolve().parents[1] / "data"
+    # root folder to search for .bits files (default: repo `ideas/`)
+    # data_root: Path = Path(__file__).resolve().parents[1]
     # path to iridium-parser.py (default: repo `iridium-toolkit-master/iridium-parser.py`)
-    parser_path: Path = Path(__file__).resolve().parents[1] / "iridium-toolkit-master" / "iridium-parser.py"
+    parser_path: Path = Path(__file__).resolve().parents[2] / "iridium-toolkit-master" / "iridium-parser.py"
 
-    job_folder_name = path_to_zip.replace('.zip', '')
+    # job_folder_name = path_to_zip.name.replace('.zip', '')
+    job_folder_name = os.path.basename(path_to_zip).replace('.zip', '')
 
-    tmp_dir = data_root / "tmp" / job_folder_name
+    tmp_dir = output_folder / job_folder_name
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    with zipfile.ZipFile(data_root / path_to_zip, 'r') as zip_ref:
+    with zipfile.ZipFile(path_to_zip, 'r') as zip_ref:
         zip_ref.extractall(tmp_dir)
-
-    cwd: Path = tmp_dir
 
 
     bits_files = list(tmp_dir.glob("*.bits"))
@@ -50,7 +56,7 @@ def raw_parser(path_to_zip: str) -> None:
         print("Only 0 or 1 file found, no aggregation needed")
 
 
-
+    cwd = tmp_dir
     cmd = [py, str(parser_path)]
     if agg:
         cmd.extend(["-p", (tmp_dir / "tmp_output.bits").name])
@@ -65,12 +71,12 @@ def raw_parser(path_to_zip: str) -> None:
         remove_path = tmp_dir / "tmp_output.bits"
         remove_path.unlink()
         rename_path = tmp_dir / "tmp_output.parsed"
-        rename_path.rename(tmp_dir / "output.parsed")
+        rename_path.replace(tmp_dir / "output.parsed")
 
-    # At Some point, delete tmp folder?
+    # TODO: At Some point, delete tmp folder?
 
-def metadata_parser(zip_folder_name: str) -> None:
-    frames, time_lower, time_upper = parser_iridium.read_parsed_output(Path(f"data/tmp/{zip_folder_name}/"))
+def metadata_parser(zip_folder_name: str, output_folder: Path) -> None:
+    frames, time_lower, time_upper = parser_iridium.read_parsed_output(output_folder / zip_folder_name)
 
 	# print(f"Time lower: {time_lower}")
 	# print(f"Time upper: {time_upper}")
@@ -79,12 +85,14 @@ def metadata_parser(zip_folder_name: str) -> None:
     if len(frames) != 0:
         type_dict = {'time': float, 'frame_type': str, 'signal_level': float, 'background_noise': float,
 					 'snr': float}
+    else:
+        return
 
     df = pd.DataFrame(data=frames)
     df = df.astype(dtype=type_dict)
     df = df.sort_values(by="time").reset_index()
 
-    df.to_feather(f"data/tmp/{zip_folder_name}/output_df.feather")
+    df.to_feather(output_folder / zip_folder_name / "output_df.feather")
 
 
 
@@ -94,6 +102,8 @@ def ira_parser(parsed_input_file):
     input: parsed_input_file; output.bits file from leocommon system after run through raw_parser function
     output: pandas dataframe containing IRA messages
     """
+    
+
     iras = []
     for line in parsed_input_file:
         # filtering Iridium Ring Alerts (IRAs) and parse
@@ -108,22 +118,22 @@ def ira_parser(parsed_input_file):
             timestamp_ms = record_start_timestamp_s * 1000 + offset_ms
             freq = int(splitted[3])
             confidence = int(splitted[4].strip("%"))
-            signal_lvls = [float(x) for x in splitted[5].split("|")]
-            length = splitted[6]
+            signal_strength, noise_strenth, snr = map(float, splitted[5].split("|"))
+            length = int(splitted[6])
             direction = splitted[7]
             satid = splitted[8].removeprefix("sat:")
             beamid = splitted[9].removeprefix("beam:")
             sat_pos = [float(x) for x in splitted[10].removeprefix("xyz=(").removesuffix(")").split(",")]
             sat_pos_latlon = [float(x) for x in splitted[11].removeprefix("pos=(").removesuffix(")").split("/")]
-            sat_alt = splitted[12].removeprefix("alt=")
+            sat_alt = int(splitted[12].removeprefix("alt="))
             rai = splitted[13].removeprefix("RAI:")
             #skip unknown field
             bc_sb = splitted[15].split(":")[-1]
             parsers_field = [x for x in splitted[16:] if x !=  "{OK}" and not x.startswith(("FILL"))]  #format parser list and ignore last filler element
 
-            iras.append([frame_type, record_start_timestamp_s, offset_ms, timestamp_ms, freq, confidence, signal_lvls, length, direction, satid, beamid, sat_pos, sat_pos_latlon, sat_alt, rai, bc_sb, parsers_field])
+            iras.append([frame_type, record_start_timestamp_s, offset_ms, timestamp_ms, freq, confidence, signal_strength, noise_strenth, snr, length, direction, satid, beamid, sat_pos, sat_pos_latlon, sat_alt, rai, bc_sb, parsers_field])
     
-    df_ira = pd.DataFrame(iras, columns=['frame_type', 'record_start_timestamp_s', 'offset_ms', 'timestamp_ms', 'freq', 'confidence', 'signal_lvls', 'length', 'direction','sat_id', 'beam_id', 'sat_pos', 'sat_pos_latlon', 'sat_alt', 'rai', 'bc_sb', 'pages'])
+    df_ira = pd.DataFrame(iras, columns=['frame_type', 'record_start_timestamp_s', 'offset_ms', 'timestamp_ms', 'freq', 'confidence', 'signal_strength', 'noise_strenth', 'snr', 'length', 'direction','sat_id', 'beam_id', 'sat_pos', 'sat_pos_latlon', 'sat_alt', 'rai', 'bc_sb', 'pages'])
     return df_ira
 
 def tdoa_filter(ira_df):
@@ -132,30 +142,52 @@ def tdoa_filter(ira_df):
 
 
 
-
+input_path = Path("ideas/data")
+parsed_folder = Path("ideas/data/parsed/")
 
 dfs = []
-input_path = "data"
-parsed_folder = Path("data/parsed/")
-# Ensure repository root is on sys.path so `app` package is importable
-# when running this script from the `data/` folder directly.
-repo_root = Path(__file__).resolve().parents[1]
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
 
-raw_parser(input_path,parsed_folder)
+for zip_file in input_path.glob("*.zip"):
 
-for file in parsed_folder.iterdir():
-    if file.is_file():          # ignore subfolders
-        with open(file,"r") as input_file:
-            df_iras = ira_parser(input_file)
-            print(df_iras)
-            #df_iras['rec_id'] = 'test'
-            #df_iras['rec_lat'] = 123
-            #df_iras['rec_lon'] = 123
-            dfs.append(df_iras)
+    job_folder_name = zip_file.name.replace('.zip', '')
+    
+    print(zip_file)
 
-final_df = pd.concat(dfs, ignore_index=True)
-final_df.to_csv("out.csv",float_format="%.8f",index=False)
-#final_df.to_feather("out.feather")
-tdoa_filter(final_df)
+    raw_parser(zip_file,parsed_folder)
+
+    metadata_parser(job_folder_name, parsed_folder)
+
+    df = ira_parser(open(parsed_folder / job_folder_name / "output.parsed","r")) 
+
+
+    # Sensor and Job info
+    df['job_name'] = job_folder_name.split('_sensor_')[0]
+    df['sensor_name'] = job_folder_name.split('_sensor_')[1]
+
+    print(df.head(1))
+
+    
+
+    dfs.append(df)
+    
+pd.concat(dfs, ignore_index=True).to_feather(parsed_folder / "ira.feather")
+
+
+
+
+
+
+# for file in parsed_folder.iterdir():
+#     if file.is_file():          # ignore subfolders
+#         with open(file,"r") as input_file:
+#             df_iras = ira_parser(input_file)
+#             print(df_iras)
+#             #df_iras['rec_id'] = 'test'
+#             #df_iras['rec_lat'] = 123
+#             #df_iras['rec_lon'] = 123
+#             dfs.append(df_iras)
+
+# final_df = pd.concat(dfs, ignore_index=True)
+# final_df.to_csv("out.csv",float_format="%.8f",index=False)
+# #final_df.to_feather("out.feather")
+# tdoa_filter(final_df)
