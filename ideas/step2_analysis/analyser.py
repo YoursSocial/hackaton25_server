@@ -3,14 +3,8 @@ import zipfile
 import subprocess
 import sys
 from pathlib import Path
-
-# Ensure repository root is on sys.path so `app` package is importable
-# when running this script from the `data/` folder directly.
-repo_root = Path(__file__).resolve().parents[1]
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
-
 from app.dashboard.parser import parser_iridium
+
 
 
 def raw_parser(path_to_zip: str) -> None:
@@ -136,9 +130,22 @@ def tdoa_filter(ira_df):
     reduced_df = ira_df[['timestamp_ms', 'freq', 'sat_id', 'beam_id','sat_pos_latlon','sat_alt']]
     print(reduced_df)
 
+
+
+
+
 dfs = []
-parsed_input_folder = Path("data/parsed/")
-for file in parsed_input_folder.iterdir():
+input_path = "data"
+parsed_folder = Path("data/parsed/")
+# Ensure repository root is on sys.path so `app` package is importable
+# when running this script from the `data/` folder directly.
+repo_root = Path(__file__).resolve().parents[1]
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+
+raw_parser(input_path,parsed_folder)
+
+for file in parsed_folder.iterdir():
     if file.is_file():          # ignore subfolders
         with open(file,"r") as input_file:
             df_iras = ira_parser(input_file)
@@ -150,4 +157,5 @@ for file in parsed_input_folder.iterdir():
 
 final_df = pd.concat(dfs, ignore_index=True)
 final_df.to_csv("out.csv",float_format="%.8f",index=False)
+#final_df.to_feather("out.feather")
 tdoa_filter(final_df)
