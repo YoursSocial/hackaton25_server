@@ -1,3 +1,4 @@
+import bson
 import pandas as pd
 import zipfile
 import subprocess
@@ -148,7 +149,11 @@ def create_network_stats(parsed_folder: Path) -> pd.DataFrame:
     feather_files = list(parsed_folder.glob("**/*.feather"))
 
     # Ingore ira.feather (as those are all ring alerts from all jobs combined)
-    ingore_files = [f for f in feather_files if f.name == "ira.feather" or f.name == "network_stats.feather" or f.name == "df_packets.feather"]
+    ingore_files = [f for f in feather_files if
+                    f.name == "ira.feather" or
+                    f.name == "network_stats.feather" or
+                    f.name == "df_packets.feather" or
+                    f.name == "clients_stats.feather"]
     feather_files = [f for f in feather_files if f not in ingore_files]
 
     print(f"Found {len(feather_files)} feather files under {parsed_folder}")
@@ -190,13 +195,105 @@ def create_network_stats(parsed_folder: Path) -> pd.DataFrame:
     return df_combined
 
 
+def create_packets_over_time(parsed_folder: Path):
+    """Create a DataFrame counting packets over time (by year and month) from network_stats.feather."""
+    
+    df = pd.read_feather(parsed_folder / "network_stats.feather")
+
+    # Group df by year and month and count datapoints per month
+    # Ensure timestamp column exists
+    if "timestamp" not in df.columns:
+        df["timestamp"] = pd.to_datetime(df["time"], unit="s", utc=True)
+
+    # Create year and month columns (integers)
+    df["year"] = df["timestamp"].dt.year
+    df["month"] = df["timestamp"].dt.month
+
+    # Aggregate: count rows per year/month
+    df_packets_over_time = (
+        df.groupby(["year", "month"])  
+        .size()
+        .reset_index(name="count")
+        .sort_values(["year", "month"])  
+        .reset_index(drop=True)
+    )
+
+    # Also add an ISO-like year-month column for easier plotting/labeling
+    df_packets_over_time["year_month"] = df_packets_over_time["year"].astype(str) + "-" + df_packets_over_time["month"].astype(str).str.zfill(2)
+
+    return df_packets_over_time
+
+
+def create_number_of_packets(parsed_folder: Path) -> pd.DataFrame:
+    """Create a DataFrame counting total number of packets from network_stats.feather."""
+    
+    df = pd.read_feather(parsed_folder / "network_stats.feather")
+
+    # Group df by number of packets
+    df_packets = df.groupby("frame_type").size().reset_index(name="count").sort_values(by="count", ascending=False).reset_index(drop=True)
+
+    return df_packets
+
+def create_number_of_jobs_per_month(parsed_folder: Path) -> pd.DataFrame:
+    """Create a DataFrame counting unique jobs per month from network_stats.feather."""
+
+    feather_path = os.path.join(parsed_folder, "network_stats.feather")
+    df = pd.read_feather(feather_path)
+
+    # Ensure timestamp column exists
+    if "timestamp" not in df.columns:
+        df["timestamp"] = pd.to_datetime(df["time"], unit="s", utc=True)
+
+    # Create year and month columns (integers)
+    df["year"] = df["timestamp"].dt.year
+    df["month"] = df["timestamp"].dt.month
+
+    # Aggregate: count unique jobs per year/month
+    df_jobs_per_month = (
+        df.groupby(["year", "month"])["job_name"]  
+        .nunique()  
+        .reset_index(name="unique_job_count")
+        .sort_values(["year", "month"])  
+        .reset_index(drop=True)
+    )
+
+    return df_jobs_per_month
+
+
+def create_clients_stats(clients_bson_path: Path) -> pd.DataFrame:
+    """"Create a client DataFrame from a BSON file input in the parsed folder."""
+
+    with open(clients_bson_path, 'rb') as fh:
+        raw = fh.read()
+
+    # iterate concatenated BSON documents manually
+    docs = []
+    offset = 0
+    length = len(raw)
+
+    while offset < length:
+        # first 4 bytes: little-endian int32 size of document
+        size = int.from_bytes(raw[offset:offset+4], 'little')
+        doc_bytes = raw[offset:offset+size]
+
+        obj = bson.loads(doc_bytes)
+        
+        docs.append(obj)
+        offset += size
+
+    return pd.DataFrame(docs)
+
+
 
 input_path = Path("ideas/data")
 parsed_folder = Path("ideas/data/parsed/")
 
 
-pd.DataFrame(create_network_stats(parsed_folder)).to_feather(parsed_folder / "network_stats.feather")
-
+# pd.DataFrame(create_network_stats(parsed_folder)).to_feather(parsed_folder / "network_stats.feather")
+# pd.DataFrame(create_packets_over_time(parsed_folder)).to_feather(parsed_folder / "df_packets_over_time.feather")
+# pd.DataFrame(create_number_of_packets(parsed_folder)).to_feather(parsed_folder / "df_packets.feather")
+pd.DataFrame(create_number_of_jobs_per_month(parsed_folder)).to_feather(parsed_folder / "df_jobs_per_month.feather")
+# pd.DataFrame(create_clients_stats(parsed_folder / "clients.bson")).to_feather(parsed_folder / "clients_stats.feather")
 
 # dfs = []
 

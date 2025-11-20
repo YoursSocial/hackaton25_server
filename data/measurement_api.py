@@ -22,13 +22,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# The API now loads DataFrames from `data/tmp/<dataset>/output_df.feather`.
-# Helpers below enumerate available datasets and load the requested feather file.
-
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _DATA_ROOT = os.path.join(_PROJECT_ROOT, "ideas", "data")
 _PARSED_ROOT = os.path.join(_DATA_ROOT, "parsed")
-
 
 
 def list_datasets() -> List[str]:
@@ -187,6 +183,10 @@ def get_tle(
 
 @app.get("/iridium_ira")
 def iridium_ira():
+
+    return {}
+
+    # TODO: implement filtering for ring alerts 
     """Get Iridium IRA data as JSON"""
 
     # feather_path = os.path.join(_DATA_ROOT, "dummy_ira.feather")
@@ -220,6 +220,8 @@ def iridium_ira():
         return JSONResponse(content=safe_json[0])
     return JSONResponse(content=safe_json)
 
+    
+
 
 @app.get("/network_stats_packets_over_time")
 def network_stats_packets_over_time():
@@ -228,31 +230,10 @@ def network_stats_packets_over_time():
     If `dataset` is omitted and exactly one dataset exists, it will be selected automatically.
     Use `limit` to restrict rows.
     """
-    feather_path = os.path.join(_PARSED_ROOT, "network_stats.feather")
+    feather_path = os.path.join(_PARSED_ROOT, "df_packets_over_time.feather")
     df = pd.read_feather(feather_path)
 
-    # Group df by year and month and count datapoints per month
-    # Ensure timestamp column exists
-    if "timestamp" not in df.columns:
-        df["timestamp"] = pd.to_datetime(df["time"], unit="s", utc=True)
-
-    # Create year and month columns (integers)
-    df["year"] = df["timestamp"].dt.year
-    df["month"] = df["timestamp"].dt.month
-
-    # Aggregate: count rows per year/month
-    df_packets_over_time = (
-        df.groupby(["year", "month"])  
-        .size()
-        .reset_index(name="count")
-        .sort_values(["year", "month"])  
-        .reset_index(drop=True)
-    )
-
-    # Also add an ISO-like year-month column for easier plotting/labeling
-    df_packets_over_time["year_month"] = df_packets_over_time["year"].astype(str) + "-" + df_packets_over_time["month"].astype(str).str.zfill(2)
-
-    records = df_packets_over_time.to_dict(orient="records")
+    records = df.to_dict(orient="records")
     return jsonable_encoder(records)
 
 
@@ -263,13 +244,10 @@ def network_stats_number_of_packets():
     If `dataset` is omitted and exactly one dataset exists, it will be selected automatically.
     Use `limit` to restrict rows.
     """
-    feather_path = os.path.join(_PARSED_ROOT, "network_stats.feather")
+    feather_path = os.path.join(_PARSED_ROOT, "df_packets.feather")
     df = pd.read_feather(feather_path)
-
-    # Group df by number of packets
-    df_packets = df.groupby("frame_type").size().reset_index(name="count").sort_values(by="count", ascending=False).reset_index(drop=True)
-
-    records = df_packets.to_dict(orient="records")
+ 
+    records = df.to_dict(orient="records")
     return jsonable_encoder(records)
 
 
@@ -280,27 +258,133 @@ def network_stats_number_of_jobs_per_month():
     If `dataset` is omitted and exactly one dataset exists, it will be selected automatically.
     Use `limit` to restrict rows.
     """
-    feather_path = os.path.join(_PARSED_ROOT, "network_stats.feather")
+    feather_path = os.path.join(_PARSED_ROOT, "df_jobs_per_month.feather")
     df = pd.read_feather(feather_path)
-
-    # Ensure timestamp column exists
-    if "timestamp" not in df.columns:
-        df["timestamp"] = pd.to_datetime(df["time"], unit="s", utc=True)
-
-    # Create year and month columns (integers)
-    df["year"] = df["timestamp"].dt.year
-    df["month"] = df["timestamp"].dt.month
-
-    # Aggregate: count unique jobs per year/month
-    df_jobs_per_month = (
-        df.groupby(["year", "month"])["job_name"]  
-        .nunique()  
-        .reset_index(name="unique_job_count")
-        .sort_values(["year", "month"])  
-        .reset_index(drop=True)
-    )
     
-    records = df_jobs_per_month.to_dict(orient="records")
+    records = df.to_dict(orient="records")
+    return jsonable_encoder(records)
+
+@app.get("/clients_geojson")
+def clients_geojson(
+    sensor: Optional[str] = Query(None, description="Specific sensor name to get GeoJSON for. If omitted, returns all available sensor files as a combined FeatureCollection."),
+    list_files: bool = Query(False, description="If true, returns a list of available GeoJSON files instead of the actual data.")
+):
+    """
+    Return sensor GeoJSON data as JSON. Can return data for a specific sensor, all sensors combined, or list available files.
+    
+    Parameters:
+    - sensor: Specific sensor name (without file extension) to get GeoJSON for
+    - list_files: If true, returns list of available files instead of GeoJSON data
+    """
+    sensor_geojson_dir = os.path.join(_PARSED_ROOT, "sensor_geojson")
+    
+    if not os.path.exists(sensor_geojson_dir):
+        raise HTTPException(status_code=404, detail=f"Sensor GeoJSON directory not found at {sensor_geojson_dir}")
+    
+    # Get list of available GeoJSON files
+    available_files = [f for f in os.listdir(sensor_geojson_dir) if f.endswith('.geojson')]
+    
+    if list_files:
+        # Return list of available files with metadata
+        file_info = []
+        for filename in sorted(available_files):
+            file_path = os.path.join(sensor_geojson_dir, filename)
+            file_size = os.path.getsize(file_path)
+            sensor_name = filename.replace('_coverage_clean.geojson', '').replace('_coverage.geojson', '')
+            file_info.append({
+                "filename": filename,
+                "sensor_name": sensor_name,
+                "file_size_bytes": file_size,
+                "file_size_kb": round(file_size / 1024, 1)
+            })
+        return jsonable_encoder({"available_files": file_info, "total_count": len(file_info)})
+    
+    if sensor:
+        # Return specific sensor GeoJSON
+        # Try different filename patterns
+        possible_filenames = [
+            f"{sensor}_coverage_clean.geojson",
+            f"{sensor}_coverage.geojson",
+            f"{sensor}.geojson"
+        ]
+        
+        geojson_path = None
+        for filename in possible_filenames:
+            potential_path = os.path.join(sensor_geojson_dir, filename)
+            if os.path.exists(potential_path):
+                geojson_path = potential_path
+                break
+        
+        if not geojson_path:
+            available_sensors = [f.replace('_coverage_clean.geojson', '').replace('_coverage.geojson', '') 
+                               for f in available_files]
+            raise HTTPException(
+                status_code=404, 
+                detail=f"GeoJSON file not found for sensor '{sensor}'. Available sensors: {sorted(set(available_sensors))}"
+            )
+        
+        with open(geojson_path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return jsonable_encoder(data)
+    
+    else:
+        # Return all sensors combined into one FeatureCollection
+        if not available_files:
+            raise HTTPException(status_code=404, detail="No GeoJSON files found in sensor directory")
+        
+        combined_features = []
+        for filename in sorted(available_files):
+            file_path = os.path.join(sensor_geojson_dir, filename)
+            try:
+                with open(file_path, "r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+                    if data.get("type") == "FeatureCollection" and "features" in data:
+                        combined_features.extend(data["features"])
+                    elif data.get("type") == "Feature":
+                        combined_features.append(data)
+            except Exception as e:
+                # Skip files that can't be loaded but don't fail completely
+                continue
+        
+        combined_geojson = {
+            "type": "FeatureCollection",
+            "features": combined_features,
+            "metadata": {
+                "total_sensors": len(combined_features),
+                "source_files": len(available_files),
+                "description": "Combined sensor coverage areas from all available sensors"
+            }
+        }
+        
+        return jsonable_encoder(combined_geojson)
+
+
+@app.get("/clients")
+def clients():
+    feather_path = os.path.join(_PARSED_ROOT, "clients.feather")
+    df = pd.read_feather(feather_path)
+    # Convert binary _id to string and handle numpy arrays
+    df_tst_clean = df.copy()
+    if '_id' in df_tst_clean.columns:
+        df_tst_clean['_id'] = df_tst_clean['_id'].apply(lambda x: x.hex() if isinstance(x, bytes) else str(x))
+
+
+    # Truncate coordinates (status_location_lat, status_location_lon) to 2 decimals for privacy
+    for col in ['status_location_lat', 'status_location_lon']:
+        if col in df_tst_clean.columns:
+            # coerce to numeric (non-numeric become NaN), then truncate instead of round
+            df_tst_clean[col] = pd.to_numeric(df_tst_clean[col], errors='coerce')
+            df_tst_clean[col] = np.trunc(df_tst_clean[col] * 100) / 100.0
+
+    # Convert to records and handle numpy arrays
+    records = df_tst_clean.to_dict(orient="records")
+
+    # Convert numpy arrays to lists for JSON serialization
+    for record in records:
+        for key, value in record.items():
+            if hasattr(value, 'tolist'):  # Check if it's a numpy array
+                record[key] = value.tolist()
+
     return jsonable_encoder(records)
 
 
