@@ -2,6 +2,8 @@ import pandas as pd
 from pathlib import Path
 import networkx as nx
 import datetime
+import numpy as np
+
 
 def match_receiver_runs(
     ira_df,
@@ -12,6 +14,8 @@ def match_receiver_runs(
     """
     Finds timestamp-level overlaps between receivers observing the same sat-beam.
     Produces clusters of receivers and timestamp pairs suitable for TDOA.
+    input: df containing ira messages
+    output: list of df, each df contains infos to calculate a tdoa signature
     """
 
     # ---------------------------------------------------------
@@ -78,6 +82,7 @@ def match_receiver_runs(
     multirec = [c for c in components if len(c) >= number_of_receivers]
     print(multirec)
     usable = []
+    counter = 0
     for cluster in multirec:
         cluster_df = df_valid[df_valid['global_run_id'].isin(cluster)]
 
@@ -92,23 +97,63 @@ def match_receiver_runs(
             if cluster_df["sensor_name"].nunique() >= number_of_receivers:
                 if (cluster_df.groupby(["sensor_name"]).size() >= number_consecutive_meas).all():
                     usable.append(cluster_df)
+                    counter += 1
                 
 
     print(usable)
+    print(f"found {counter} clusters with {number_consecutive_meas} consecutive measurements across {number_of_receivers} receivers")
+    return usable
+
+def calculate_tdoa(batch,signature_kind):
+    print(batch)
+    toas = np.array([x["timestamp_ms"] for x in batch])
+    print(toas)
+    if signature_kind == 0:
+        return toas - toas[0] 
+    elif signature_kind == 1:
+        return toas - np.roll(toas, shift=1)
+    elif signature_kind == 2:
+        return (toas - toas[:,None])
+    else:
+        return []
+     
+   
+
+def calculate_signature(matched_df):
+    satellite = matched_df["sat_id"][0]
+    groups = [g.sort_values("datetime") for _, g in matched_df.groupby('sensor_name')]
+    #print(groups)
+    tdoas1 = []
+    tdoas2 = []
+    tdoas3 = []
+    for i in range(len(groups[0])):
+        batch = [g.iloc[i] for g in groups if i < len(g)]
+        batch = [x[["sensor_name","datetime", "timestamp_ms"]] for x in batch]
+        tdoa1 = calculate_tdoa(batch,0)
+        tdoa2 = calculate_tdoa(batch,1)
+        tdoa3 = calculate_tdoa(batch,2)
+
+        tdoas1.append(tdoa1)
+        tdoas2.append(tdoa2)
+        tdoas3.append(tdoa3)
+    
+    print(f'{tdoas1}\n{tdoas2}\n{tdoas3}\n\n')
+    
+    return
 
 
-parsed_folder = Path("../data/parsed/")
-ira_df =  pd.read_feather(parsed_folder/"ira.feather")
-#ira_df = pd.read_csv("ira.feather")
-number_consecutive_meas = 3
+
+#parsed_folder = Path("../data/parsed/")
+#ira_df =  pd.read_feather(parsed_folder/"ira.feather")
+ira_df = pd.read_feather("ira.feather")
+number_consecutive_meas = 6
 inter_receiver_difference = 2 #s
 intra_receiver_difference = 5 #s, should be about 4s
 number_of_receivers = 3
 
-match_receiver_runs(ira_df,
-    number_consecutive_meas,
-    inter_receiver_difference,
-    intra_receiver_difference,
-    number_of_receivers)
+"""usables = match_receiver_runs(ira_df,number_consecutive_meas,inter_receiver_difference,intra_receiver_difference,number_of_receivers)
+for i in range(len(usables)):
+    usables[i].to_csv(f"data/usables/cluster{i}.csv")"""
 
-
+usable = pd.read_csv("data/usables/cluster0.csv")
+calculate_signature(usable)
