@@ -77,7 +77,7 @@ def match_receiver_runs(
     # keep only those with number of desired receivers
     multirec = [c for c in components if len(c) >= number_of_receivers]
     print(multirec)
-    counter = 0
+    usable = []
     for cluster in multirec:
         cluster_df = df_valid[df_valid['global_run_id'].isin(cluster)]
 
@@ -90,17 +90,16 @@ def match_receiver_runs(
         
         if not cluster_df.empty:
             if cluster_df["sensor_name"].nunique() >= number_of_receivers:
-                counter +=1
-                print(max_start)
-                print(min_end)
-                print(cluster_df)
+                if (cluster_df.groupby(["sensor_name"]).size() >= number_consecutive_meas).all():
+                    usable.append(cluster_df)
+                
 
-    print(counter)
+    print(usable)
 
 
 parsed_folder = Path("../data/parsed/")
 ira_df =  pd.read_feather(parsed_folder/"ira.feather")
-#ira_df = pd.read_csv("small_data.csv")
+#ira_df = pd.read_csv("ira.feather")
 number_consecutive_meas = 3
 inter_receiver_difference = 2 #s
 intra_receiver_difference = 5 #s, should be about 4s
